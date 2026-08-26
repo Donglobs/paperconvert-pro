@@ -119,6 +119,12 @@ def process_image():
         raw=request.form.get('points')
         if raw:
             pts=json.loads(raw)
+            # The browser sends points as [{x:..., y:...}, ...].
+            # OpenCV needs numeric coordinate pairs, not dictionaries.
+            if isinstance(pts, list) and all(isinstance(p, dict) for p in pts):
+                pts=[[float(p.get('x', 0)), float(p.get('y', 0))] for p in pts]
+            else:
+                pts=[[float(p[0]), float(p[1])] for p in pts]
         enhanced,bw=enhance(img,pts)
         return jsonify({'enhanced':data_url(enhanced),'threshold':data_url(cv2.cvtColor(bw,cv2.COLOR_GRAY2BGR))})
     except Exception as e:

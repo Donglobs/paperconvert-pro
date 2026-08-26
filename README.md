@@ -9,3 +9,6 @@ pip install -r requirements.txt
 python app.py
 
 Open http://localhost:5000
+
+## v6.1 fix
+Preserves full-resolution source during perspective correction and handles empty OCR results safely.

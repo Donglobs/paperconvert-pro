@@ -51,12 +51,18 @@ def auto_crop(img):
 
 def deskew(img):
     gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    bw=cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)[1]
-    coords=np.column_stack(np.where(bw>0))
-    if len(coords)<100: return img
-    angle=cv2.minAreaRect(coords)[-1]
-    angle=-(90+angle) if angle < -45 else -angle
-    if abs(angle)<0.25: return img
+    edges=cv2.Canny(cv2.GaussianBlur(gray,(5,5),0),50,150)
+    lines=cv2.HoughLinesP(edges,1,np.pi/180,threshold=90,minLineLength=max(100,img.shape[1]//5),maxLineGap=30)
+    angles=[]
+    if lines is not None:
+        for l in lines[:,0]:
+            x1,y1,x2,y2=l
+            ang=np.degrees(np.arctan2(y2-y1,x2-x1))
+            if -20<ang<20: angles.append(ang)
+            elif 160<abs(ang)<180: angles.append(ang-180 if ang>0 else ang+180)
+    if not angles: return img
+    angle=float(np.median(angles))
+    if abs(angle)<0.35: return img
     h,w=img.shape[:2]; M=cv2.getRotationMatrix2D((w/2,h/2),angle,1.0)
     return cv2.warpAffine(img,M,(w,h),flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
 
@@ -74,10 +80,17 @@ def remove_shadows(gray):
     return cv2.normalize(normalized,None,0,255,cv2.NORM_MINMAX)
 
 def enhance(img, pts=None):
+    # For photographed paper, a wrong automatic crop is worse than no crop.
+    # v5 therefore uses user-selected corners when available and otherwise
+    # performs conservative full-page cleanup.
     if pts is not None:
         img=perspective_from_points(img,pts)
-    else:
-        img=auto_crop(img)
+    # Upscale small text before OCR.
+    h,w=img.shape[:2]
+    target=2600
+    if max(h,w)<target:
+        scale=target/max(h,w)
+        img=cv2.resize(img,None,fx=scale,fy=scale,interpolation=cv2.INTER_CUBIC)
     img=deskew(img)
     gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     gray=remove_shadows(gray)

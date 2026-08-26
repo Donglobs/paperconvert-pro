@@ -1,21 +1,14 @@
-# PaperConvert Pro v3
+# PaperConvert Pro v5
 
-Smart paper-to-document web app with automatic image enhancement before OCR.
+OCR-focused document scanner for photographed paper.
 
-## New in v3
-- Automatic document edge detection and perspective crop
-- Deskew/rotation correction
-- Contrast enhancement, denoising and sharpening
-- Adaptive threshold OCR image
-- Per-page Enhance control
-- OCR confidence display
-- Improved Word table reconstruction for tab/space-separated rows
-- Production Gunicorn/Render configuration
+### v5 changes
+- No risky automatic quadrilateral crop before OCR.
+- User-controlled 4-corner perspective correction.
+- Conservative Hough-based deskew.
+- Upscaling for small printed text.
+- Shadow normalization, CLAHE, denoising and sharpening.
+- OCR runs on two cleaned variants and keeps the higher-confidence result.
+- OCR is blocked until the page has been cleaned, preventing raw photos from being sent directly to Tesseract.
 
-## Run
-python -m venv .venv
-.venv\\Scripts\\activate
-pip install -r requirements.txt
-python app.py
-
-Open http://localhost:5000
+Run with `pip install -r requirements.txt` and `gunicorn app:app`.

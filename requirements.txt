@@ -5,3 +5,4 @@ reportlab>=4.0
 PyMuPDF>=1.24
 opencv-python-headless>=4.10
 numpy>=1.26
+gunicorn>=23.0

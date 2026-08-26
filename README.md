@@ -1,14 +1,11 @@
-# PaperConvert Pro v5
+# PaperConvert Pro v6
 
-OCR-focused document scanner for photographed paper.
+OCR-focused document scanner. Uses manual page corners, perspective correction, lighting normalization, multiple OCR-friendly image variants, and multiple Tesseract.js page segmentation passes.
 
-### v5 changes
-- No risky automatic quadrilateral crop before OCR.
-- User-controlled 4-corner perspective correction.
-- Conservative Hough-based deskew.
-- Upscaling for small printed text.
-- Shadow normalization, CLAHE, denoising and sharpening.
-- OCR runs on two cleaned variants and keeps the higher-confidence result.
-- OCR is blocked until the page has been cleaned, preventing raw photos from being sent directly to Tesseract.
+## Run
+python -m venv .venv
+.venv\\Scripts\\activate
+pip install -r requirements.txt
+python app.py
 
-Run with `pip install -r requirements.txt` and `gunicorn app:app`.
+Open http://localhost:5000

@@ -19,19 +19,20 @@ def pil_from_upload(f):
     return ImageOps.exif_transpose(Image.open(f.stream).convert('RGB'))
 
 def order_points(pts):
-    rect=np.zeros((4,2),dtype='float32')
-    s=pts.sum(axis=1); d=np.diff(pts,axis=1).ravel()
-    rect[0]=pts[np.argmin(s)]; rect[2]=pts[np.argmax(s)]
-    rect[1]=pts[np.argmin(d)]; rect[3]=pts[np.argmax(d)]
-    return rect
+    pts=np.asarray(pts,dtype=np.float32).reshape(4,2)
+    s=pts[:,0]+pts[:,1]
+    d=pts[:,1]-pts[:,0]
+    return np.array([pts[int(np.argmin(s))], pts[int(np.argmin(d))], pts[int(np.argmax(s))], pts[int(np.argmax(d))]],dtype=np.float32)
 
 def four_point_transform(img, pts):
-    rect=order_points(pts); tl,tr,br,bl=rect
-    w1=np.linalg.norm(br-bl); w2=np.linalg.norm(tr-tl); h1=np.linalg.norm(tr-br); h2=np.linalg.norm(tl-bl)
-    W=max(int(max(w1,w2)), 100); H=max(int(max(h1,h2)),100)
-    dst=np.array([[0,0],[W-1,0],[W-1,H-1],[0,H-1]],dtype='float32')
+    rect=order_points(pts)
+    tl,tr,br,bl = rect[0],rect[1],rect[2],rect[3]
+    w1=float(np.linalg.norm(br-bl)); w2=float(np.linalg.norm(tr-tl))
+    h1=float(np.linalg.norm(tr-br)); h2=float(np.linalg.norm(tl-bl))
+    W=max(int(round(max(w1,w2))),100); H=max(int(round(max(h1,h2))),100)
+    dst=np.array([[0,0],[W-1,0],[W-1,H-1],[0,H-1]],dtype=np.float32)
     M=cv2.getPerspectiveTransform(rect,dst)
-    return cv2.warpPerspective(img,M,(W,H))
+    return cv2.warpPerspective(img,M,(W,H),flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
 
 def auto_crop(img):
     h,w=img.shape[:2]
@@ -51,19 +52,20 @@ def auto_crop(img):
 
 def deskew(img):
     gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    edges=cv2.Canny(cv2.GaussianBlur(gray,(5,5),0),50,150)
-    lines=cv2.HoughLinesP(edges,1,np.pi/180,threshold=90,minLineLength=max(100,img.shape[1]//5),maxLineGap=30)
-    angles=[]
-    if lines is not None:
-        for l in lines[:,0]:
-            x1,y1,x2,y2=l
-            ang=np.degrees(np.arctan2(y2-y1,x2-x1))
-            if -20<ang<20: angles.append(ang)
-            elif 160<abs(ang)<180: angles.append(ang-180 if ang>0 else ang+180)
-    if not angles: return img
-    angle=float(np.median(angles))
+    bw=cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)[1]
+    ys,xs=np.where(bw>0)
+    if len(xs)<100:
+        return img
+    pts=np.column_stack((xs,ys)).astype(np.float32)
+    rect=cv2.minAreaRect(pts)
+    angle=float(rect[2])
+    if rect[1][0] < rect[1][1]:
+        angle += 90.0
+    if angle>45: angle-=90
+    if angle<-45: angle+=90
     if abs(angle)<0.35: return img
-    h,w=img.shape[:2]; M=cv2.getRotationMatrix2D((w/2,h/2),angle,1.0)
+    h,w=img.shape[:2]
+    M=cv2.getRotationMatrix2D((w/2,h/2),angle,1.0)
     return cv2.warpAffine(img,M,(w,h),flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
 
 def perspective_from_points(img, pts):

@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
-import io, base64, re
+import io, base64, re, json
 from PIL import Image, ImageOps
 import numpy as np
 import cv2
@@ -60,16 +60,33 @@ def deskew(img):
     h,w=img.shape[:2]; M=cv2.getRotationMatrix2D((w/2,h/2),angle,1.0)
     return cv2.warpAffine(img,M,(w,h),flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
 
-def enhance(img):
-    img=auto_crop(img)
+def perspective_from_points(img, pts):
+    pts=np.asarray(pts,dtype='float32').reshape(4,2)
+    return four_point_transform(img, pts)
+
+def remove_shadows(gray):
+    # Estimate the page's uneven lighting and divide it out. This is much better
+    # for phone photos than a simple global threshold.
+    kernel=cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(51,51))
+    background=cv2.morphologyEx(gray,cv2.MORPH_CLOSE,kernel)
+    background=cv2.GaussianBlur(background,(0,0),15)
+    normalized=cv2.divide(gray,background,scale=255)
+    return cv2.normalize(normalized,None,0,255,cv2.NORM_MINMAX)
+
+def enhance(img, pts=None):
+    if pts is not None:
+        img=perspective_from_points(img,pts)
+    else:
+        img=auto_crop(img)
     img=deskew(img)
     gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # local contrast + light denoise, retaining letter edges
-    clahe=cv2.createCLAHE(clipLimit=2.2,tileGridSize=(8,8)); gray=clahe.apply(gray)
+    gray=remove_shadows(gray)
+    clahe=cv2.createCLAHE(clipLimit=2.0,tileGridSize=(8,8)); gray=clahe.apply(gray)
     gray=cv2.fastNlMeansDenoising(gray,None,7,7,21)
-    sharp=cv2.addWeighted(gray,1.35,cv2.GaussianBlur(gray,(0,0),1.0),-0.35,0)
-    # adaptive threshold is excellent for photographed paper; keep grayscale for photos with illustrations
-    bw=cv2.adaptiveThreshold(sharp,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,31,11)
+    sharp=cv2.addWeighted(gray,1.45,cv2.GaussianBlur(gray,(0,0),1.1),-0.45,0)
+    bw=cv2.adaptiveThreshold(sharp,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,41,13)
+    # Remove tiny specks while preserving characters.
+    bw=cv2.medianBlur(bw,3)
     return sharp,bw
 
 def data_url(img, quality=92):
@@ -85,7 +102,11 @@ def process_image():
     if not f: return jsonify({'error':'No file'}),400
     try:
         img=np.array(pil_from_upload(f))[:,:,::-1].copy()
-        enhanced,bw=enhance(img)
+        pts=None
+        raw=request.form.get('points')
+        if raw:
+            pts=json.loads(raw)
+        enhanced,bw=enhance(img,pts)
         return jsonify({'enhanced':data_url(enhanced),'threshold':data_url(cv2.cvtColor(bw,cv2.COLOR_GRAY2BGR))})
     except Exception as e:
         return jsonify({'error':str(e)}),500
